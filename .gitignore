@@ -1,0 +1,66 @@
+# STM32 Project .gitignore
+
+# Build outputs
+*.hex
+*.elf
+*.bin
+*.map
+*.sct
+*.axf
+
+# IDE files
+*.uvprojx
+*.uvoptx
+*.uvproj
+*.uvopt
+*.ewp
+*.eww
+*.ewd
+*.ewt
+*.ewo
+*.project
+*.cproject
+*.settings
+*.launch
+*.uvguix.*
+
+# MDK-ARM specific files
+MDK-ARM/DebugConfig/
+MDK-ARM/EventRecorderStub.scvd
+MDK-ARM/JLinkLog.txt
+MDK-ARM/JLinkSettings.ini
+MDK-ARM/RTE/
+MDK-ARM/*.htm
+MDK-ARM/*.html
+MDK-ARM/ExtDll.iex
+
+# Intermediate files
+*.o
+*.obj
+*.d
+*.dep
+*.lst
+*.lnp
+*.crf
+*.bak
+
+# Directories
+build/
+Debug/
+Release/
+out/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# CubeMX generated temporary files
+*.ioc.bak
+*.ioc.user
+
+# Other temporary files
+*.tmp
+*.temp
+*.log
