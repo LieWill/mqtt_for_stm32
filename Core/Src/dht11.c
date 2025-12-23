@@ -488,7 +488,7 @@ const char* DHT11_GetStatusString(DHT11_Status_t status)
 }
 
 /**
-  * @brief  调试打印函数
+  * @brief  调试打印函数 - 使用统一日志库
   */
 void DHT11_DebugPrint(const char *format, ...)
 {
@@ -500,9 +500,8 @@ void DHT11_DebugPrint(const char *format, ...)
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     
-    /* 通过UART1输出调试信息 */
-    extern UART_HandleTypeDef huart1;
-    HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), 100);
+    /* 使用LOG_Raw以兼容原有格式 */
+    LOG_Raw("%s", buffer);
 #else
     (void)format;   /* 避免未使用警告 */
 #endif

@@ -20,14 +20,14 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
-#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "esp8266.h" // esp8266驱动库
-#include "dht11.h"   // dht11驱动库
+#include "log.h"         // 统一日志库
+#include "esp8266.h"     // esp8266驱动库
+#include "dht11.h"       // dht11驱动库
 #include "esp8266_mqtt.h" // esp8266的MQTT驱动库
 #include "light_sensor.h" // 光敏传感器驱动库
 /* USER CODE END Includes */
@@ -71,6 +71,9 @@ void OnMQTTDisconnected(void);
 void OnMQTTMessageReceived(MQTT_Message_t *message);
 void OnMQTTPublishComplete(const char *topic);
 void OnMQTTError(MQTT_Status_t error);
+
+/* JSON解析辅助函数 */
+static int JSON_GetBoolValue(const char *json, const char *key, uint8_t *value);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -110,19 +113,22 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART1_UART_Init();
-  MX_TIM13_Init();
   MX_USART3_UART_Init();
   MX_ADC3_Init();
   /* USER CODE BEGIN 2 */
+	/* 初始化统一日志库 */
+	LOG_Init(&huart1);
+	LOG_I("MAIN", "System starting...");
+	
 	/* 初始化DHT11温湿度传感器 */
 	DHT11_Init();
-	HAL_UART_Transmit(&huart1, (uint8_t*)"DHT11 init finished\r\n", 22, 100);
+	LOG_I("MAIN", "DHT11 initialized");
 	
 	/* 初始化光敏传感器 (轮询模式) */
 	if (LightSensor_Init() == LIGHT_SENSOR_OK) {
-		HAL_UART_Transmit(&huart1, (uint8_t*)"LightSensor init OK\r\n", 22, 100);
+		LOG_I("MAIN", "LightSensor initialized");
 	} else {
-		HAL_UART_Transmit(&huart1, (uint8_t*)"LightSensor init failed!\r\n", 26, 100);
+		LOG_E("MAIN", "LightSensor init failed!");
 	}
 	
 	ESP8266_Status_t status;
@@ -130,7 +136,7 @@ int main(void)
     /* 初始化ESP8266 */
     status = ESP8266_Init(&huart3);
     if (status != ESP8266_OK) {
-        ESP8266_DebugPrint("ESP8266 init failed!\r\n");
+        LOG_E("ESP8266", "ESP8266 init failed!");
     }
     
     /* 设置WiFi模式为Station */
@@ -139,21 +145,21 @@ int main(void)
     /* 连接WiFi */
     status = ESP8266_ConnectAP("AK70", "204081011");
     if (status == ESP8266_OK) {
-        ESP8266_DebugPrint("WiFi connected!\r\n");
+        LOG_I("ESP8266", "WiFi connected!");
         
         /* 获取IP地址 */
         ESP8266_IPInfo_t ipInfo;
         ESP8266_GetIPInfo(&ipInfo);
-        ESP8266_DebugPrint("IP: %s\r\n", ipInfo.ip);
+        LOG_I("ESP8266", "IP: %s", ipInfo.ip);
     } else {
-        ESP8266_DebugPrint("WiFi connection failed!\r\n");
+        LOG_E("ESP8266", "WiFi connection failed!");
     }
 	
 	
 	  MQTT_State_t ret = MQTT_Init();
     if (ret != MQTT_OK)
 		{
-			MQTT_DebugPrint("[MQTT] MQTT init faild!\r\n");
+			LOG_E("MQTT", "MQTT init failed!");
 			return -1;
 		}
     
@@ -175,7 +181,7 @@ int main(void)
     ret = MQTT_SetUserConfig(&userConfig);
     if (ret != MQTT_OK)
 		{
-			MQTT_DebugPrint("[MQTT] Set User Config faild!\r\n");
+			LOG_E("MQTT", "Set User Config failed!");
 		}
  
     
@@ -184,14 +190,22 @@ int main(void)
     ret = MQTT_SetBroker(MQTT_EXAMPLE_BROKER, MQTT_EXAMPLE_PORT, 1);
 		if (ret != MQTT_OK)
 		{
-			MQTT_DebugPrint("[MQTT] Connecting Broker faild!\r\n");
+			LOG_E("MQTT", "Set Broker failed!");
 			////return -1;
 		}
     
     /* 7. 连接 */
     ret = MQTT_Connect();
     if (ret == MQTT_OK) {
-        MQTT_DebugPrint("[Example] Connected!\r\n");
+        LOG_I("MQTT", "Connected to broker!");
+        
+        /* 8. 订阅控制主题 */
+        ret = MQTT_Subscribe(MQTT_TOPIC_CONTROL, MQTT_QOS_1);
+        if (ret == MQTT_OK) {
+            LOG_I("MQTT", "Subscribed to %s", MQTT_TOPIC_CONTROL);
+        } else {
+            LOG_E("MQTT", "Subscribe failed!");
+        }
     }
   /* USER CODE END 2 */
 
@@ -213,13 +227,11 @@ int main(void)
 		
 		if (dht_status == DHT11_OK) {
 			/* 构建包含所有传感器数据的JSON */
-        snprintf(buffer, sizeof(buffer), 
-                 "{\"temp\":%.1f,\"humi\":%.1f,\"light\":%d}", 
-                 temperature, humidity, light_value);
-        
-        /* 调试输出 */
-        HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), 100);
-        HAL_UART_Transmit(&huart1, (uint8_t*)"\r\n", 2, 100);
+			snprintf(buffer, sizeof(buffer), 
+				"{\"temp\":%.1f,\"humi\":%.1f,\"light\":%d}", 
+				temperature, humidity, light_value);
+			LOG_I("MQTT", "%s", buffer);
+ 
         
         /* 发布到MQTT */
         MQTT_Publish(MQTT_TOPIC_SENSOR_DATA, buffer, MQTT_QOS_0, 0);
@@ -230,10 +242,10 @@ int main(void)
         HAL_UART_Transmit(&huart1, (uint8_t*)"\r\n", 2, 100);
         MQTT_Publish(MQTT_TOPIC_SENSOR_DATA, buffer, MQTT_QOS_0, 0);
     }
+    /* 处理MQTT订阅消息 */
+    MQTT_ProcessData();
     
     HAL_Delay(5000);  /* 每5秒读取一次 */
-		//HAL_UART_Transmit(&huart1,"hello world\n", 12, 100);
-		//HAL_GPIO_WritePin(GPIOF, GPIO_PIN_8, GPIO_PIN_SET);
 		
     /* USER CODE END WHILE */
 
@@ -298,7 +310,7 @@ void SystemClock_Config(void)
   */
 void OnMQTTConnected(void)
 {
-    MQTT_DebugPrint("[MQTT] Connected callback!\r\n");
+    LOG_I("MQTT", "Connected callback!");
 }
 
 /**
@@ -306,29 +318,103 @@ void OnMQTTConnected(void)
   */
 void OnMQTTDisconnected(void)
 {
-    MQTT_DebugPrint("[MQTT] Disconnected callback!\r\n");
+    LOG_W("MQTT", "Disconnected callback!");
+}
+
+/**
+  * @brief  JSON解析辅助函数 - 获取布尔值
+  * @param  json: JSON字符串
+  * @param  key: 要查找的键名
+  * @param  value: 输出布尔值 (1=true, 0=false)
+  * @retval 0=成功, -1=未找到键, -2=解析失败
+  */
+static int JSON_GetBoolValue(const char *json, const char *key, uint8_t *value)
+{
+    if (!json || !key || !value) return -2;
+    
+    /* 构建搜索模式 "key": */
+    char pattern[64];
+    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
+    
+    char *ptr = strstr(json, pattern);
+    if (!ptr) return -1;  /* 未找到键 */
+    
+    /* 跳过 "key": */
+    ptr += strlen(pattern);
+    
+    /* 跳过空格 */
+    while (*ptr == ' ') ptr++;
+    
+    /* 解析值 */
+    if (strncmp(ptr, "true", 4) == 0 || strncmp(ptr, "1", 1) == 0) {
+        *value = 1;
+        return 0;
+    } else if (strncmp(ptr, "false", 5) == 0 || strncmp(ptr, "0", 1) == 0) {
+        *value = 0;
+        return 0;
+    }
+    
+    return -2;  /* 解析失败 */
 }
 
 /**
   * @brief  MQTT消息接收回调
   * @param  message: 接收到的消息
+  * @note   解析JSON格式数据控制LED和蜂鸣器
+  *         支持格式: {"led1":true}, {"led2":false}, {"beep":true} 等
+  *         也支持组合: {"led1":true,"led2":false,"beep":true}
   */
 void OnMQTTMessageReceived(MQTT_Message_t *message)
 {
     if (!message) return;
     
-    MQTT_DebugPrint("[MQTT] Message received!\r\n");
-    MQTT_DebugPrint("  Topic: %s\r\n", message->topic);
-    MQTT_DebugPrint("  Data: %s\r\n", message->data);
+    LOG_I("MQTT", "Message received!");
+    LOG_D("MQTT", "Topic: %s", message->topic);
+    LOG_D("MQTT", "Data: %s", message->data);
     
-    /* 处理控制命令 - 可以根据需要扩展 */
+    /* 处理控制命令 */
     if (strcmp(message->topic, MQTT_TOPIC_CONTROL) == 0) {
-        if (strstr((char *)message->data, "led_on")) {
-            /* 打开LED */
-            HAL_GPIO_WritePin(GPIOF, GPIO_PIN_8, GPIO_PIN_SET);
-        } else if (strstr((char *)message->data, "led_off")) {
-            /* 关闭LED */
-            HAL_GPIO_WritePin(GPIOF, GPIO_PIN_8, GPIO_PIN_RESET);
+        uint8_t boolValue;
+        char *jsonData = (char *)message->data;
+        
+        /* ========== LED1控制 (PF9) ========== */
+        /* JSON格式: {"led1":true} 或 {"led1":false} */
+        if (JSON_GetBoolValue(jsonData, "led1", &boolValue) == 0) {
+            HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 
+                              boolValue ? GPIO_PIN_SET : GPIO_PIN_RESET);
+            LOG_I("Control", "LED1 -> %s", boolValue ? "ON" : "OFF");
+        }
+        
+        /* ========== LED2控制 (PF10) ========== */
+        /* JSON格式: {"led2":true} 或 {"led2":false} */
+        if (JSON_GetBoolValue(jsonData, "led2", &boolValue) == 0) {
+            HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 
+                              boolValue ? GPIO_PIN_SET : GPIO_PIN_RESET);
+            LOG_I("Control", "LED2 -> %s", boolValue ? "ON" : "OFF");
+        }
+        
+        /* ========== LED3控制 (PE13) ========== */
+        /* JSON格式: {"led3":true} 或 {"led3":false} */
+        if (JSON_GetBoolValue(jsonData, "led3", &boolValue) == 0) {
+            HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 
+                              boolValue ? GPIO_PIN_SET : GPIO_PIN_RESET);
+            LOG_I("Control", "LED3 -> %s", boolValue ? "ON" : "OFF");
+        }
+        
+        /* ========== LED4控制 (PE14) ========== */
+        /* JSON格式: {"led4":true} 或 {"led4":false} */
+        if (JSON_GetBoolValue(jsonData, "led4", &boolValue) == 0) {
+            HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 
+                              boolValue ? GPIO_PIN_SET : GPIO_PIN_RESET);
+            LOG_I("Control", "LED4 -> %s", boolValue ? "ON" : "OFF");
+        }
+        
+        /* ========== 蜂鸣器控制 (PF8) ========== */
+        /* JSON格式: {"beep":true} 或 {"beep":false} */
+        if (JSON_GetBoolValue(jsonData, "beep", &boolValue) == 0) {
+            HAL_GPIO_WritePin(BEEP_GPIO_Port, BEEP_Pin, 
+                              boolValue ? GPIO_PIN_SET : GPIO_PIN_RESET);
+            LOG_I("Control", "BEEP -> %s", boolValue ? "ON" : "OFF");
         }
     }
 }
@@ -339,7 +425,7 @@ void OnMQTTMessageReceived(MQTT_Message_t *message)
   */
 void OnMQTTPublishComplete(const char *topic)
 {
-    MQTT_DebugPrint("[MQTT] Published to: %s\r\n", topic);
+    LOG_D("MQTT", "Published to: %s", topic);
 }
 
 /**
@@ -348,7 +434,7 @@ void OnMQTTPublishComplete(const char *topic)
   */
 void OnMQTTError(MQTT_Status_t error)
 {
-    MQTT_DebugPrint("[MQTT] Error: %d\r\n", error);
+    LOG_E("MQTT", "Error: %d", error);
 }
 
 /* USER CODE END 4 */
@@ -362,6 +448,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+	LOG_E("Error_Handler", "Error occurrence!");
   while (1)
   {
   }

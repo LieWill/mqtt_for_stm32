@@ -31,10 +31,14 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "usart.h"
+#include "log.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+
+/* 日志TAG */
+#define TAG_ESP8266                     "ESP8266"
 
 /* Exported defines ----------------------------------------------------------*/
 

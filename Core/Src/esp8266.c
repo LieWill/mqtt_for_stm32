@@ -7,16 +7,16 @@
   */
 
 #include "esp8266.h"
+#include "esp8266_mqtt.h"  /* 用于异步MQTT消息处理 */
 
 /* Private variables ---------------------------------------------------------*/
 ESP8266_Handle_t esp8266;
-extern UART_HandleTypeDef huart1;  /* 调试输出UART */
 
 /* Private function prototypes -----------------------------------------------*/
 static void ESP8266_Delay(uint32_t ms);
 static uint8_t ESP8266_ParseIPD(ESP8266_RxData_t *rxData);
 
-/* Debug print */
+/* Debug print - 使用统一日志库 */
 void ESP8266_DebugPrint(const char *format, ...)
 {
 #if ESP8266_DEBUG_ENABLE
@@ -25,7 +25,8 @@ void ESP8266_DebugPrint(const char *format, ...)
     va_start(args, format);
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
-    HAL_UART_Transmit(&huart1, (uint8_t *)buf, strlen(buf), HAL_MAX_DELAY);
+    /* 使用LOG_Raw以兼容原有格式 */
+    LOG_Raw("%s", buf);
 #endif
 }
 
@@ -89,6 +90,17 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
         esp8266.rxBuffer[Size] = '\0';
         esp8266.rxLength = Size;
         esp8266.rxComplete = 1;
+        
+        /* 检测MQTT订阅消息，复制到专用缓冲区等待处理 */
+        if (strstr((char *)esp8266.rxBuffer, "+MQTTSUBRECV:") != NULL) {
+            extern MQTT_Handle_t mqtt;
+            uint16_t copyLen = Size < 511 ? Size : 511;
+            memcpy(mqtt.msgBuffer, esp8266.rxBuffer, copyLen);
+            mqtt.msgBuffer[copyLen] = '\0';
+            mqtt.msgLen = copyLen;
+            mqtt.msgPending = 1;  /* 设置待处理标志 */
+        }
+        
         ESP8266_StartDMAReceive();
     }
 }

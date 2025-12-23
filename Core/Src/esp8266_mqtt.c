@@ -28,7 +28,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 MQTT_Handle_t mqtt;
-extern UART_HandleTypeDef huart1;  /* 调试输出UART */
 
 /* Private function prototypes -----------------------------------------------*/
 static void MQTT_Delay(uint32_t ms);
@@ -36,7 +35,7 @@ static MQTT_Status_t MQTT_ParseSubMessage(const char *data);
 static void MQTT_AddSubscription(const char *topic, MQTT_QoS_t qos);
 static void MQTT_RemoveSubscription(const char *topic);
 
-/* Debug print */
+/* Debug print - 使用统一日志库 */
 void MQTT_DebugPrint(const char *format, ...)
 {
 #if MQTT_DEBUG_ENABLE
@@ -45,7 +44,8 @@ void MQTT_DebugPrint(const char *format, ...)
     va_start(args, format);
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
-    HAL_UART_Transmit(&huart1, (uint8_t *)buf, strlen(buf), HAL_MAX_DELAY);
+    /* 使用LOG_Raw以兼容原有格式 */
+    LOG_Raw("%s", buf);
 #endif
 }
 
@@ -839,6 +839,8 @@ static MQTT_Status_t MQTT_ParseSubMessage(const char *data)
     /* 解析 +MQTTSUBRECV:<LinkID>,"<topic>",<data_length>,<data> */
     if (!data) return MQTT_ERROR;
     
+    MQTT_DebugPrint("[MQTT] Parsing SUBRECV message...\r\n");
+    
     char *ptr = strstr(data, "+MQTTSUBRECV:");
     if (!ptr) return MQTT_ERROR;
     
@@ -882,10 +884,16 @@ static MQTT_Status_t MQTT_ParseSubMessage(const char *data)
     memcpy(msg.data, ptr, copyLen);
     msg.data[copyLen] = '\0';
     
+    MQTT_DebugPrint("[MQTT] Received: topic=%s, len=%d, data=%s\r\n", 
+                    msg.topic, msg.dataLen, msg.data);
+    
     /* 调用回调 */
     mqtt.receiveCount++;
     if (mqtt.onMessageReceived) {
+        MQTT_DebugPrint("[MQTT] Calling onMessageReceived callback\r\n");
         mqtt.onMessageReceived(&msg);
+    } else {
+        MQTT_DebugPrint("[MQTT] WARNING: onMessageReceived callback is NULL!\r\n");
     }
     
     return MQTT_OK;
@@ -897,6 +905,12 @@ static MQTT_Status_t MQTT_ParseSubMessage(const char *data)
 void MQTT_ProcessData(void)
 {
     if (!mqtt.initialized) return;
+    
+    /* 优先处理异步接收到的订阅消息 */
+    if (mqtt.msgPending) {
+        mqtt.msgPending = 0;  /* 清除标志 */
+        MQTT_ParseSubMessage((char *)mqtt.msgBuffer);
+    }
     
     char *respBuf = ESP8266_GetResponseBuffer();
     
@@ -915,7 +929,7 @@ void MQTT_ProcessData(void)
         if (mqtt.onConnected) mqtt.onConnected();
     }
     
-    /* 检查订阅消息 */
+    /* 检查订阅消息 (同步方式，作为备用) */
     if (strstr(respBuf, "+MQTTSUBRECV:")) {
         MQTT_ParseSubMessage(respBuf);
     }

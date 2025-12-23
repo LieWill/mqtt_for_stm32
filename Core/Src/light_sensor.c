@@ -169,7 +169,7 @@ uint8_t LightSensor_IsInitialized(void)
 }
 
 /**
-  * @brief  调试打印函数
+  * @brief  调试打印函数 - 使用统一日志库
   */
 void LightSensor_DebugPrint(const char *format, ...)
 {
@@ -181,8 +181,8 @@ void LightSensor_DebugPrint(const char *format, ...)
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     
-    extern UART_HandleTypeDef huart1;
-    HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), 100);
+    /* 使用LOG_Raw以兼容原有格式 */
+    LOG_Raw("%s", buffer);
 #else
     (void)format;
 #endif

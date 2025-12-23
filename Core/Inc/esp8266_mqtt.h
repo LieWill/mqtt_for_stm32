@@ -192,6 +192,11 @@ typedef struct {
     uint8_t initialized;                /* 初始化标志 */
     uint8_t connected;                  /* 连接标志 */
     
+    /* 异步消息处理 */
+    volatile uint8_t msgPending;        /* 消息待处理标志 */
+    uint8_t msgBuffer[512];             /* 消息缓冲区 */
+    uint16_t msgLen;                    /* 消息长度 */
+    
     /* 统计信息 */
     uint32_t publishCount;              /* 发布计数 */
     uint32_t receiveCount;              /* 接收计数 */

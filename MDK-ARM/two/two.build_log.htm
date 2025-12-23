@@ -22,25 +22,29 @@ Dialog DLL:      TCM.DLL V1.56.4.0
  
 <h2>Project:</h2>
 D:\code\mcu\stm32\F407\two\MDK-ARM\two.uvprojx
-Project File Date:  12/17/2025
+Project File Date:  12/19/2025
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 6 (build 750)', folder: 'D:\application\keil\ARM\ARMCC\Bin'
 Build target 'two'
 compiling main.c...
-../Core/Src/main.c(153): warning:  #188-D: enumerated type mixed with another type
+../Core/Src/main.c(159): warning:  #188-D: enumerated type mixed with another type
   	  MQTT_State_t ret = MQTT_Init();
-../Core/Src/main.c(175): warning:  #188-D: enumerated type mixed with another type
+../Core/Src/main.c(181): warning:  #188-D: enumerated type mixed with another type
       ret = MQTT_SetUserConfig(&userConfig);
-../Core/Src/main.c(184): warning:  #188-D: enumerated type mixed with another type
+../Core/Src/main.c(190): warning:  #188-D: enumerated type mixed with another type
       ret = MQTT_SetBroker(MQTT_EXAMPLE_BROKER, MQTT_EXAMPLE_PORT, 1);
-../Core/Src/main.c(192): warning:  #188-D: enumerated type mixed with another type
+../Core/Src/main.c(198): warning:  #188-D: enumerated type mixed with another type
       ret = MQTT_Connect();
-../Core/Src/main.c: 4 warnings, 0 errors
+../Core/Src/main.c(203): warning:  #188-D: enumerated type mixed with another type
+          ret = MQTT_Subscribe(MQTT_TOPIC_CONTROL, MQTT_QOS_1);
+../Core/Src/main.c: 5 warnings, 0 errors
+compiling esp8266_mqtt.c...
+compiling esp8266.c...
 linking...
-Program Size: Code=17848 RO-data=716 RW-data=20 ZI-data=9484  
+Program Size: Code=19464 RO-data=848 RW-data=32 ZI-data=17096  
 FromELF: creating hex file...
-"two\two.axf" - 0 Error(s), 4 Warning(s).
+"two\two.axf" - 0 Error(s), 5 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -63,7 +67,7 @@ Package Vendor: Keil
 
    * Component: ARM::CMSIS:CORE@5.6.0
       Include file:  CMSIS/Core/Include/tz_context.h
-Build Time Elapsed:  00:00:03
+Build Time Elapsed:  00:00:04
 </pre>
 </body>
 </html>
